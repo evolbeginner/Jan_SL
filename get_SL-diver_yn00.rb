@@ -3,12 +3,6 @@
 require 'getoptlong'
 require 'String'
 
-#################################################################################################
-class String
-  def numeric?
-    Float(self) != nil rescue false
-  end
-end
 
 #################################################################################################
 blast8_file=nil
@@ -22,7 +16,18 @@ lists_included=Array.new
 items_included=Hash.new
 lists_excluded=Array.new
 items_excluded=Hash.new
+suffix = nil
 
+
+#################################################################################################
+class String
+  def numeric?
+    Float(self) != nil rescue false
+  end
+end
+
+
+#################################################################################################
 opts = GetoptLong.new(
   ["--blast8_file","--blast_file",GetoptLong::REQUIRED_ARGUMENT],
   ["--kaks_file",GetoptLong::REQUIRED_ARGUMENT],
@@ -31,7 +36,9 @@ opts = GetoptLong.new(
   ["--kaks_field",GetoptLong::REQUIRED_ARGUMENT],
   ["--list_included",GetoptLong::REQUIRED_ARGUMENT],
   ["--list_excluded",GetoptLong::REQUIRED_ARGUMENT],
+  ["--suffix",GetoptLong::REQUIRED_ARGUMENT],
 )
+
 
 opts.each do |opt,value|
   case opt
@@ -51,6 +58,8 @@ opts.each do |opt,value|
       lists_included.push value
     when '--list_excluded'
       lists_excluded.push value
+    when '--suffix'
+      suffix = value
   end
 end
 
@@ -61,6 +70,7 @@ end
 kaks_fields=[1,3] if kaks_fields.empty?
 blast8_fields=[2,12] if blast8_fields.empty?
 
+
 if ! lists_included.empty?
   lists_included.each do |file|
     File.open(file,'r').each_line do |line|
@@ -68,6 +78,7 @@ if ! lists_included.empty?
     end
   end
 end
+
 
 if ! lists_excluded.empty?
   lists_excluded.each do |file|
@@ -77,8 +88,10 @@ if ! lists_excluded.empty?
   end
 end
 
+
 #################################################################################################
 File.open(blast8_file,'r').each_line do |line|
+  next if line =~ /^#/
   line.chomp!
   subject,bit_score = line.split("\t").values_at(blast8_fields[0]-1,blast8_fields[1]-1).map{|i|i.numeric? ? i.to_f : i}
   if ! items_included.empty?
@@ -87,8 +100,13 @@ File.open(blast8_file,'r').each_line do |line|
   if ! items_excluded.empty?
     next if items_excluded.include?(subject)
   end
+
+  if ! suffix.nil?
+    subject.sub!(/#{suffix}/, "")
+  end
   bit_scores[subject] = (! bit_scores.include? subject or bit_score>bit_scores[subject]) ? bit_score : bit_scores[subject]
 end
+
 
 File.open(kaks_file,'r').each_line do |line|
   line.chomp!
@@ -97,7 +115,9 @@ File.open(kaks_file,'r').each_line do |line|
   pair.split(separator).map{|i| kss[i]=ks if ks =~ /\d/}
 end
 
+
 bit_scores.keys.select{|i|kss.include? i}.each do |k|
   puts [k,bit_scores[k],kss[k]].join("\t")
 end
+
 

@@ -6,6 +6,7 @@
 require 'getoptlong'
 require 'basic_math'
 
+
 inputs = Array.new
 list_file = nil
 gene_sep = "\t"
@@ -105,6 +106,7 @@ end
 gene_pairs.each do |pair_genes|
   values = pair_genes.map{|gene|value_info[gene].values}
   p pearson_correlate(values[0], values[1])
+  #p spearman_correlate(values[0], values[1])
 end
 
 

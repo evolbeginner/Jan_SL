@@ -1,5 +1,5 @@
 #! read and get information of gff file
-#  made by SSW
+#  made by Sishuo Wang (sishuowang@hotmail.ca)
 
 import re
 
@@ -16,14 +16,23 @@ class gff_items_class():
         if self.types_included:
             if not item_type in self.types_included:
                 return
+
+        target = None
         for target_regexp in self.target_regexps:
             new_target_regexp = target_regexp + r'=([^;]+)'
             m = re.search(new_target_regexp,line_array[8])
-            if not m.group(1):
+            if m.group(1):
+                target = m.group(1)
                 continue
-            target = m.group(1)
+
+        if target:
             items_dict[target] = gff_items(start,stop,strand,chr)
+        else:
+            target = attributes
+            items_dict[target] = gff_items(start,stop,strand,chr)
+
         return items_dict
+
 
 
 class gff_items():
@@ -32,4 +41,5 @@ class gff_items():
         self.stop=stop
         self.strand=strand
         self.chr=chr
+
 

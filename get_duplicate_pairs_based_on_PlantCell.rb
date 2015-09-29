@@ -55,17 +55,20 @@ class Is_paralogs
   end
 end
 
+
 ################################################################################
-def read_seq_file(seq_file,seq_file_suffix=nil)
+def read_seq_file(seq_file, seq_file_suffix=nil)
   require 'bio'
   seq_info=Hash.new{|h,k|h[k]={}}
   fh = Bio::FlatFile.open(seq_file)
   fh.each_entry do |f|
-    title=f.definition.sub(/#{seq_file_suffix}/,'') if seq_file_suffix
+    title = f.definition
+    title.sub!(/#{seq_file_suffix}/,'') if seq_file_suffix =~ /./
     seq_info[title]['length']=f.seq.length
   end
   return seq_info
 end
+
 
 def read_gene_list_file(gene_list_file=nil)
   gene_list=Hash.new
@@ -84,9 +87,11 @@ def determine_gene_suffix(genes, gene_suffix='')
     return genes_without_suffix[0] == genes_without_suffix[1] ? true : false
 end
 
+
 def get_pair(genes)
   return genes.sort.join('-')
 end
+
 
 def parse_orthomcl_file(infile, gene_prefix=nil, gene_suffix='', is_corename=false)
   orthoMCL_pairs=Array.new
@@ -277,6 +282,7 @@ class String
     return(gene)
   end
 end
+
 
 ################################################################################
 show_help() if not ARGV[0]
