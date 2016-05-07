@@ -7,7 +7,7 @@ require 'getoptlong'
 pair_file=nil
 gene_list_file=nil
 field=0
-pair_sep='_'
+pair_sep='-'
 is_corename=false
 is_output_each_containing = false
 
@@ -54,7 +54,7 @@ end
 
 File.open(pair_file,'r').each_line do |line|
   line.chomp!
-  pair = line.split("\t")[0]
+  pair = (line.split("\t"))[0]
   genes = pair.split(pair_sep)
   if is_output_each_containing
     genes.each do |i|
@@ -63,6 +63,7 @@ File.open(pair_file,'r').each_line do |line|
     end
   else
     if genes.select{|i| ele = is_corename ? i.sub!(/\.[^.]+$/,'') : i; genes_list.include?(ele)}.empty?
+      #p genes.select{|i| ele = is_corename ? i.sub!(/\.[^.]+$/,'') : i}
       puts pair
     end
   end

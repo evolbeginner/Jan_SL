@@ -17,6 +17,7 @@ items_included=Hash.new
 lists_excluded=Array.new
 items_excluded=Hash.new
 suffix = nil
+is_strict_sl = false
 
 
 #################################################################################################
@@ -37,6 +38,7 @@ opts = GetoptLong.new(
   ["--list_included",GetoptLong::REQUIRED_ARGUMENT],
   ["--list_excluded",GetoptLong::REQUIRED_ARGUMENT],
   ["--suffix",GetoptLong::REQUIRED_ARGUMENT],
+  ["--strict_sl",GetoptLong::NO_ARGUMENT],
 )
 
 
@@ -60,6 +62,8 @@ opts.each do |opt,value|
       lists_excluded.push value
     when '--suffix'
       suffix = value
+    when '--strict_sl'
+      is_strict_sl = true
   end
 end
 
@@ -110,8 +114,11 @@ end
 
 File.open(kaks_file,'r').each_line do |line|
   line.chomp!
-  line_array = line.split("\t")
-  pair,ks = line_array[kaks_fields[0]-1], line_array[kaks_fields[1]-1]
+  line_arr = line.split("\t")
+  pair, ks = line_arr.values_at(kaks_fields[0]-1, kaks_fields[1]-1)
+  if is_strict_sl
+    next if pair.split(separator).select{|i|i if bit_scores.include?(i)}.size >= 2
+  end
   pair.split(separator).map{|i| kss[i]=ks if ks =~ /\d/}
 end
 

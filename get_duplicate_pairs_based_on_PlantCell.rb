@@ -13,6 +13,8 @@
 ################################################################################
 require 'getoptlong'
 
+
+################################################################################
 orthomcl_file=nil
 blast_file=nil
 gene_list_file=nil
@@ -22,7 +24,8 @@ gene_suffix=nil
 gene_prefix=nil
 seq_file=nil
 seq_file_suffix=nil
-outfile=nil
+outfile1=nil
+outfile2=nil
 is_corename=false
 
 blast_args=Hash.new
@@ -33,6 +36,7 @@ pairs=Hash.new{|h,k|h[k]=Array.new}
 seq_info=Hash.new
 is_paralogs=nil
 counters_included={1=>'',2=>''}
+
 
 ################################################################################
 class Is_paralogs
@@ -57,6 +61,17 @@ end
 
 
 ################################################################################
+def output_result(outfile, genes_InOrNotIn_pairs, counters_included)
+  out_fh = outfile.nil? ? STDOUT : File.open(outfile, 'w')
+  genes_InOrNotIn_pairs['IN'].each do |gene,v1|
+    v1.each do |counter,v2|
+      next if ! counters_included.include?(counter)
+      out_fh.puts [gene,counter,v2].flatten.join("\t")
+    end
+  end
+end
+
+
 def read_seq_file(seq_file, seq_file_suffix=nil)
   require 'bio'
   seq_info=Hash.new{|h,k|h[k]={}}
@@ -89,7 +104,7 @@ end
 
 
 def get_pair(genes)
-  return genes.sort.join('-')
+  return genes.sort.join('_')
 end
 
 
@@ -176,7 +191,7 @@ def select_pairs_from_list(gene_list,pairs)
     pairs[type].each do |pair; counter|
       genes=Array.new
       counter=0
-      pair.split('-').each do |gene|
+      pair.split('_').each do |gene|
         if gene_list.include? gene then
           counter+=1
           genes.push gene
@@ -225,7 +240,7 @@ def select_pairs_from_multi_blast_hits(blast_pairs, genes_not_in_pairs, gene_lis
           is_go_on=true
         end
         if is_go_on then
-          pair=[gene,paralog].join('-')
+          pair=[gene,paralog].join('_')
           counter = gene_list.include?(paralog) ? 2 : 1
           best=v
         end
@@ -265,7 +280,8 @@ def show_help()
   --blast_args
   --seq|--seq_file
   --seq_file_suffix
-  -o|--output|--outfile
+  --o1|--out1|--outfile1|--output1
+  --o2|--out2|--outfile2|--output2
   --corename
   -h|--help
 EOF
@@ -296,7 +312,8 @@ opts = GetoptLong.new(
   ['--blast_args', GetoptLong::REQUIRED_ARGUMENT],
   ['--seq', '--seq_file', GetoptLong::REQUIRED_ARGUMENT],
   ['--seq_file_suffix', GetoptLong::REQUIRED_ARGUMENT],
-  ['-o', '--output', '--outfile', GetoptLong::REQUIRED_ARGUMENT],
+  ['--o1', '--output1', '--out1', '--outfile1', GetoptLong::REQUIRED_ARGUMENT],
+  ['--o2', '--output2', '--out2', '--outfile2', GetoptLong::REQUIRED_ARGUMENT],
   ['--corename', GetoptLong::NO_ARGUMENT],
   ['-h', '--help', GetoptLong::NO_ARGUMENT],
 )
@@ -324,8 +341,10 @@ opts.each do |opt,value|
       seq_file=value
     when '--counters', '--counters_included'
       counters_included[value.to_i]=''
-    when '-o', '--output', '--outfile'
-      outfile=value
+    when '--o1', '--output1', '--out1', '--outfile1'
+      outfile1 = value
+    when '--o2', '--output2', '--out2', '--outfile2'
+      outfile2 = value
     when '--no_corename'
       is_corename=false
     when '--corename'
@@ -334,6 +353,7 @@ opts.each do |opt,value|
       show_help()
   end
 end
+
 
 # check params
 if not gene_list_file
@@ -347,6 +367,7 @@ if gene_list_file
 end
 raise "gene list cannot be obtained!" if gene_list.empty?
 
+
 seq_info = read_seq_file(seq_file,seq_file_suffix) if seq_file
 is_paralogs = Is_paralogs.new(blast_args) if blast_args
 
@@ -354,26 +375,20 @@ pairs['orthomcl'] = parse_orthomcl_file(orthomcl_file, gene_prefix, gene_suffix,
 
 blast_pairs = get_blast_pairs(blast_file, gene_prefix, gene_suffix, seq_info, is_paralogs, gene_list, is_corename)
 best_blast_pairs = get_best_hits_of_a_gene(blast_pairs)
-pairs['blast'] = get_best_reciprocal_pairs best_blast_pairs
+pairs['blast'] = get_best_reciprocal_pairs(best_blast_pairs)
 
+
+################################################################################
 if gene_list_file then
   pairs_selected, genes_InOrNotIn_pairs = select_pairs_from_list(gene_list,pairs)
+  output_result(outfile1, genes_InOrNotIn_pairs, counters_included) # output
+
   pairs['blast2nd'], second_genes_on_list = select_pairs_from_multi_blast_hits(blast_pairs,genes_InOrNotIn_pairs['NOTIN'],gene_list,is_paralogs)
   genes_InOrNotIn_pairs['IN'].merge!(second_genes_on_list)
   genes_InOrNotIn_pairs['NOTIN'] = gene_list.keys - genes_InOrNotIn_pairs['IN'].keys
+  output_result(outfile2, genes_InOrNotIn_pairs, counters_included) # output
 end
 
-fh=File.open(outfile,'w') if ! outfile.nil?
-genes_InOrNotIn_pairs['IN'].each do |gene,v1|
-  v1.each do |counter,v2|
-    next if ! counters_included.include?(counter)
-    if ! outfile.nil?
-      fh.puts [gene,counter,v2].flatten.join("\t")
-    else
-      puts [gene,counter,v2].flatten.join("\t")
-    end
-  end
-end
+
 # pairs.map{|type,v|puts v.size}
-
 

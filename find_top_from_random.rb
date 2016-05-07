@@ -1,0 +1,1 @@
+/home/sswang/tools/self_bao_cun/others/find_top_from_random.rb

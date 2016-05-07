@@ -26,6 +26,7 @@ def trim_cds_seq(seq=nil, is_translate=false, codon_table=1)
   return seq
 end
 
+
 def usage
   script_basename=File.basename $0
   puts "Usage of #{script_basename}: ruby #{script_basename} arguments"
@@ -66,6 +67,7 @@ EOF
   puts
   exit
 end
+
 
 ###########################################################################
 opts=GetoptLong.new(

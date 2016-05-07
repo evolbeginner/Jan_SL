@@ -48,6 +48,7 @@ end
 def output_subject_info(subject_info={}, exon_info={}, gff_info={})
   subject_info.keys.sort{|a,b| [subject_info[a]['posi'].size]<=>[subject_info[b]['posi'].size]}.each do |subject|
   #subject_info.keys.sort{|a,b| subject_info[a]['score'][0].to_f<=>subject_info[b]['score'][0].to_f}.each do |subject|
+    next if subject.nil?
     print subject+"\t"+subject_info[subject]['posi'].join("\t")+"\t"
     print subject_info[subject]['score'].join("\t")+"\t"
     if exon_info.include? subject then
@@ -114,11 +115,12 @@ def get_exon_info(exon_info={}, exon_counting_file)
   return exon_info
 end
 
+
 ###############################################
 opts = GetoptLong.new(
   ['--blast_result',GetoptLong::REQUIRED_ARGUMENT],
   ['--exon_counting_file',GetoptLong::REQUIRED_ARGUMENT],
-  ['--e_value','--evalue',GetoptLong::REQUIRED_ARGUMENT],
+  ['-e', '--e_value','--evalue',GetoptLong::REQUIRED_ARGUMENT],
   ['--identity',GetoptLong::REQUIRED_ARGUMENT],
   ['--aln_length',GetoptLong::REQUIRED_ARGUMENT],
   ['--output_subject_info',GetoptLong::NO_ARGUMENT],
@@ -142,7 +144,7 @@ opts.each do |opt,value|
       attributes[value]=1
     when '--identity'
       cutoff['identity']=value.to_f
-    when '--e_value', '-evalue'
+    when '-e', '--e_value', '-evalue'
       cutoff['e_value']=value.to_f
     when '--aln_length'
       cutoff['aln_length']=value.to_i

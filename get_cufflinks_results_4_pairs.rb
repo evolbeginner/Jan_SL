@@ -5,14 +5,14 @@ require 'Dir'
 
 
 ##############################################################################
-def read_cufflinks_results(cufflinks_file)
+def read_cufflinks_results(cufflinks_file, cufflinks_gene_field=0)
   fpkms=Hash.new
   File.open(cufflinks_file,'r').each_line do |line|
     next if $. == 1
     line.chomp!
-    tracking_id,gene_id,fpkm = line.split("\t").values_at(0,3,9)
-    fpkm=fpkm.to_f
-    fpkms[tracking_id]=fpkm
+    tracking_id, fpkm = line.split("\t").values_at(cufflinks_gene_field-1,9)
+    fpkm = fpkm.to_f
+    fpkms[tracking_id] = fpkm
     #fpkms[gene_id]=fpkm
   end
   return(fpkms)
@@ -31,10 +31,11 @@ end
 
 
 def output_fpkm_4_each_gene(fpkm_samples,output_dir="./")
-  fpkm_samples.each_with_index do |fpkm,index|
+  fpkm_samples.each_with_index do |fpkmsh,index|
     fh=File.open(File.join([output_dir,index.to_s]),'w')
-    fpkm.each_pair do |gene,value|
-      fh.puts [value.to_s,gene].join("\t") if value != 0
+    fpkmsh.each_pair do |gene, fpkm|
+      fh.puts [gene, fpkm.to_s].join("\t")
+      #fh.puts [gene, fpkm.to_s].join("\t") if fpkm != 0
     end
     fh.close
   end
@@ -88,25 +89,11 @@ def get_fpkm_results(genes,fpkm_samples)
     fpkm_samples.each_with_index do |fpkm_sample,index2|
       next if not fpkm_sample.include? gene_with_SL
       next if not fpkm_sample.include? gene_without_SL
-      fpkm_results[index2].push [fpkm_sample[gene_with_SL],fpkm_sample[gene_without_SL]]
+      pair_name = [gene_with_SL, gene_without_SL].join("-")
+      fpkm_results[index2].push [pair_name, fpkm_sample[gene_with_SL],fpkm_sample[gene_without_SL]]
     end
   end
   return fpkm_results
-end
-
-
-def output_fpkm_results(fpkm_results,output_dir)
-  fpkm_results.keys.each do |key|
-    fh = File.open(File.join([output_dir,key.to_s]),'w')
-    fpkm_results[key].each do |pair_array|
-      k_0=0
-      pair_array.each do |i|
-        k_0+=1 if i!=0
-      end
-      puts pair_array.join("\t") if k_0>=1
-    end
-    fh.close
-  end
 end
 
 
@@ -130,6 +117,7 @@ outdir="./"
 gene_pair_file_line_sep = "\t"
 gene_sep = "-"
 allele_RegExp = nil
+cufflinks_gene_field = 0
 
 fpkm_samples=Array.new
 genes=Hash.new{|h,k|h[k]=Array.new}
@@ -139,6 +127,7 @@ genes_included=Hash.new
 
 opts=GetoptLong.new(
   ['--cufflinks','--cufflinks_results',GetoptLong::REQUIRED_ARGUMENT],
+  ['--cufflinks_gene_field',GetoptLong::REQUIRED_ARGUMENT],
   ['--pairs_file','--pairs',GetoptLong::REQUIRED_ARGUMENT],
   ['--genes_included','--genes_list_included',GetoptLong::REQUIRED_ARGUMENT],
   ['--outdir',GetoptLong::REQUIRED_ARGUMENT],
@@ -154,6 +143,8 @@ opts.each do |opt,value|
       value.split(',').each do |file|
         cufflinks_files.push file
       end
+    when '--cufflinks_gene_field'
+      cufflinks_gene_field = value.to_i
     when '--pairs', '--pairs_file'
       pairs_file=value
     when '--genes_included','--gene_list_included'
@@ -185,7 +176,7 @@ end
 
 ##############################################################################
 cufflinks_files.each do |cufflinks_file|
-  fpkm_samples.push read_cufflinks_results(cufflinks_file)
+  fpkm_samples.push read_cufflinks_results(cufflinks_file, cufflinks_gene_field)
 end
 
 if ! genes_lists_included.empty?

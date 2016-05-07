@@ -129,7 +129,7 @@ end
 raise "Params are not complete! Please check." if not input or not outdir
 
 `rm -rf #{outdir}` if File.exists?(outdir)
-Dir.mkdir(outdir)
+`mkdir -p #{outdir}`
 if ! region.nil? then
   if region=~/(\d+),(\d+)/ then
     start, stop = $1.to_i, $2.to_i
