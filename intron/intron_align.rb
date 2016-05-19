@@ -1,5 +1,6 @@
 #! /bin/env ruby
 
+
 require "getoptlong"
 require "bio"
 
@@ -160,7 +161,6 @@ def parse_cds_info(cds_info)
       pre_na_posi = na_posi
     end
   end
-  #p intron_info
   return(intron_info)
 end
 
@@ -172,7 +172,7 @@ extensions = Array.new
 gff_files = Array.new
 prop_of_diff_sites_cutoff = 0.5
 prop_of_gaps_cutoff = 0.3
-intron_sliding_cutoff = 3
+intron_sliding_cutoff = 5
 
 aln_info = Hash.new{|h,k|h[k]=Array.new}
 cds_info = Hash.new{|h,k|h[k]=Hash.new}
@@ -269,22 +269,21 @@ end
 
 
 puts aln_info.keys.sort.join("-")
-print "shared\t"
 intron_posi["shared"].each_pair do |aln_posi, v|
   next if not well_aligned_posi.include?(aln_posi)
-  print aln_posi.to_s + "\t"
+  print [aln_posi, "shared"].map{|i|i.to_s}.join("\t") + "\t"
+  puts v.map{|i|i.join("\t")}.join("\t")
 end
-puts
 
 
-print "diff\t"
 intron_posi['diff'].each_pair do |aln_posi, v|
   next if not well_aligned_posi.include?(aln_posi)
   next if intron_sliding_aln_posi.include?(aln_posi)
-  print [aln_posi, v[0][0]].join("\t") + "\t"
+  print [aln_posi, "diff"].map{|i|i.to_s}.join("\t") + "\t"
+  puts v.map{|i|i.join("\t")}.join("\t")
+  #puts [aln_posi, "diff", v[0][0], v[0][1], v[0][2]].map{|i|i.to_s}.join("\t")
 end
 
-puts
 puts
 
 

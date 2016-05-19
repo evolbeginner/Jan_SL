@@ -13,11 +13,15 @@ exon_file = nil
 pair_file = nil
 gff_file = nil
 attr = "ID"
+blast8_file = nil
+evalue_cutoff = 1e-3
+queries_included = Array.new
 pep_seq_file = nil
 up300_seq_file = nil
 suffix = nil
 
 gff_info = Hash.new
+blast_info = Hash.new
 
 
 ##########################################################################
@@ -91,6 +95,25 @@ def read_pair_file(pair_file)
 end
 
 
+def read_blast8_file(blast8_file, evalue_cutoff, queries_included={})
+  blast_info = Hash.new{|h,k|h[k]=Array.new}
+  content = File.open(blast8_file, 'r').read
+  content.gsub!(/[#][^\n]+\n/, '')
+  obj = Bio::Blast::Report.new(content)
+  obj.iterations[0].hits.each do |i|
+    if not queries_included.empty?
+      next if not queries_included.include?(i.query_id)
+    end
+    i.hsps.each do |hsp|
+      next if hsp.evalue > evalue_cutoff
+      #p [i.target_id, hsp.evalue, hsp.percent_identity, hsp.align_len]
+      blast_info[i.target_id] << hsp
+    end
+  end
+  return(blast_info)
+end
+
+
 def read_seq_file(seq_file)
   seq_info = Hash.new
   Bio::FlatFile.open(seq_file).each_entry do |f|
@@ -108,6 +131,9 @@ opts = GetoptLong.new(
   ["-p", '--pair', GetoptLong::REQUIRED_ARGUMENT],
   ["--gff", GetoptLong::REQUIRED_ARGUMENT],
   ["--attr", GetoptLong::REQUIRED_ARGUMENT],
+  ["-b", "--blast8", GetoptLong::REQUIRED_ARGUMENT],
+  ["-e", "--evalue", "--e_value", GetoptLong::REQUIRED_ARGUMENT],
+  ["--query", "--query_included", GetoptLong::REQUIRED_ARGUMENT],
   ["--pep", "--pep_seq", GetoptLong::REQUIRED_ARGUMENT],
   ["--up300", "--up300_seq", GetoptLong::REQUIRED_ARGUMENT],
   ["--suffix", GetoptLong::REQUIRED_ARGUMENT],
@@ -127,6 +153,12 @@ opts.each do |opt, value|
       gff_file = value
     when '--attr'
       attr = value
+    when '-b', '--blast8'
+      blast8_file = value
+    when '-e', '--evalue', '--e_value'
+      evalue_cutoff = value.to_f
+    when '--query', '--query_included', 'queries_included'
+      value.split(',').map{|i|queries_included << i}
     when '--pep', '--pep_seq'
       pep_seq_file = value
     when '--up300', '--up300_seq'
@@ -135,6 +167,8 @@ opts.each do |opt, value|
       suffix = value
   end
 end
+
+blast_info = read_blast8_file(blast8_file, evalue_cutoff, queries_included)
 
 
 ##########################################################################
@@ -145,6 +179,8 @@ up300_seq_info = read_seq_file(up300_seq_file)
 genes = read_gene_lists(infiles)
 
 gff_info = read_gff(gff_file, attr, suffix)
+
+blast_info = read_blast8_file(blast8_file, evalue_cutoff, queries_included)
 
 exon_num = read_exon_file(exon_file)
 
@@ -157,7 +193,7 @@ begin
   #con.query("drop table IF EXISTS Genes")
   con.query("CREATE TABLE IF NOT EXISTS \
             Genes(
-              pri VARCHAR(50),
+              pri VARCHAR(50) primary key,
               id VARCHAR(50),
               orgn VARCHAR(30),
               parent VARCHAR(50),
@@ -166,33 +202,48 @@ begin
               start INT,
               end INT,
               pep_seq VARCHAR(5000),
-              up300_seq VARCHAR(350)
+              up300_seq VARCHAR(350),
+              identities VARCHAR(50),
+              target_starts VARCHAR(30),
+              target_ends VARCHAR(30),
+              aln_lengths VARCHAR(50),
+              evalues VARCHAR(50)
               )"
            )
-
+  
   genes.each_key do |gene|
     if not exon_num.include?(gene)
-      puts "Warming: gene #{gene} not included in exon_num file."
+      STDERR.puts "Warming: gene #{gene} not included in exon_num file."
       next
     end
 
     if not parent_info.include?(gene)
       parent = ''
     else
-      parent = "#{parent_info[gene]}"
+      parent = parent_info[gene]
     end
 
     pri = [orgn, gene].join('-')
-    con.query("INSERT INTO Genes(pri, id, orgn, parent, exon_num, chr, start, end, pep_seq, up300_seq) \
-              VALUES(\"#{pri}\", \"#{gene}\", \"#{orgn}\", \"#{parent}\", #{exon_num[gene]}, \"#{gff_info[gene]['chr']}\", #{gff_info[gene]['start']}, #{gff_info[gene]['end']}, \"#{pep_seq_info[gene]}\", \"#{up300_seq_info[gene]}\")"
+    identity_str = blast_info[gene].map{|i|i.percent_identity}.map{|i|i.to_s+"%"}.join(",")
+    target_start_str = blast_info[gene].map{|i|i.hit_from}.map{|i|i.to_s}.join(",")
+    target_end_str = blast_info[gene].map{|i|i.hit_to}.map{|i|i.to_s}.join(",")
+    aln_length_str = blast_info[gene].map{|i|i.align_len}.map{|i|i.to_s}.join(",")
+    evalue_str = blast_info[gene].map{|i|i.evalue}.map{|i|i.to_s}.join(",")
+
+    con.query("INSERT INTO Genes(pri, id, orgn, parent, exon_num, chr, start, end, pep_seq, up300_seq, identities, target_starts, target_ends, aln_lengths, evalues) \
+              VALUES(\"#{pri}\", \"#{gene}\", \"#{orgn}\", \"#{parent}\", #{exon_num[gene]}, \"#{gff_info[gene]['chr']}\", #{gff_info[gene]['start']}, #{gff_info[gene]['end']}, \"#{pep_seq_info[gene]}\", \"#{up300_seq_info[gene]}\", \"#{identity_str}\", \"#{target_start_str}\", \"#{target_end_str}\", \"#{aln_length_str}\", \"#{evalue_str}\")"
              )
   end
 
-  rs = con.query("SELECT * FROM Genes")
 
+  rs = con.query("SELECT * FROM Genes")
+  
+  counter = 0
   rs.each do |row|
-    puts row.join("\t")
-  end    
+    #puts row.join("\t")
+    counter += 1
+  end
+  puts "Successfull! #{counter} items have been inserted into the table Genes"
  
 rescue Mysql::Error => e
   puts e.errno

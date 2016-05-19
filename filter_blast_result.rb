@@ -13,10 +13,12 @@ BEGIN{
 =end
 }
 
+
 ###################################################################################
 require 'getoptlong'
 require 'filter_blast_output'
 require 'read_seq_objs'
+
 
 ###################################################################################
 def generate_regions_range(keys, posi) # keys: %w[query subject]
@@ -115,6 +117,7 @@ if ! seq_files.empty?
   end
 end
 
+
 ###################################################################################
 Dir.foreach(indir) do |file|
   next if file =~ /^\./
@@ -123,4 +126,5 @@ Dir.foreach(indir) do |file|
   filterBlastOutput_object = FilterBlastOutput.new(file_FullName, blast_outfmt, seq_objs)
   filterBlastOutput_object.filter(e_value_cutoffs, identity_range, aligned_length_range, regions_range, action, outdir, donor_args)
 end
+
 

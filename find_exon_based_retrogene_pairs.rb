@@ -97,12 +97,14 @@ end
 
 def find_pairs(orthomcl_output,blast_output,prefix,suffix,seq_file,gene_list,outfile,
                 seq_file_suffix='\|.+',blast_args={'e_value'=>1e-10,'coverage'=>0.3})
+  dirname = File.dirname($0)
+  get_duplicate_pairs_based_on_PlantCell = File.join([dirname, "get_duplicate_pairs_based_on_PlantCell.rb"])
   blast_args_content = %w[e_value coverage].map{|i|blast_args[i]}.join(",")
-  execute = "time ruby2.1 get_duplicate_pairs_based_on_PlantCell.rb --orthomcl #{orthomcl_output} --blast #{blast_output} --seq #{seq_file} --prefix #{prefix} --seq_file_suffix #{seq_file_suffix} --blast_args #{blast_args_content} --gene_list #{gene_list} -o #{outfile}"
+  execute = "time ruby2.1 #{get_duplicate_pairs_based_on_PlantCell} --orthomcl #{orthomcl_output} --blast #{blast_output} --seq #{seq_file} --prefix #{prefix} --seq_file_suffix #{seq_file_suffix} --blast_args #{blast_args_content} --gene_list #{gene_list} --o2 #{outfile}"
   puts "\nCommand:"
   puts execute
   puts
-  system("#{execute}")
+  system("#{execute} > /dev/null")
 end
 
 
@@ -156,8 +158,8 @@ exon_info_file_format='list'
 features=Array.new
 attributes=Array.new
 max_num_of_exons=1
-prefix="''"
-suffix="''"
+gene_prefix="''"
+gene_suffix="''"
 seq_file_suffix="''"
 orthomcl_file=nil
 blast_file=nil
@@ -226,7 +228,8 @@ opts.each do |opt,value|
     when '--blast_seq_file'
       blast_seq_file=value
     when '--prefix'
-      gene_prefix=value
+      gene_prefix = value
+      gene_prefix = "'" + value + "'"
     when '--suffix'
       gene_suffix=value 
     when '--seq_file_suffix'
@@ -260,6 +263,7 @@ mkdir_with_force(outdir,force)
 gene_list_outfile = File.join([outdir,"gene_list"])
 gene_pair_outfile=File.join([outdir,'gene_pairs.list'])
 
+
 ####################################################################
 if not (exon_info_file) or (not cds_file)
   raise "exon_info_file or cds_file not given!"
@@ -291,13 +295,13 @@ end
 fh.close
 
 if not gene_pair_infile
-  find_pairs(orthomcl_file,blast_file,prefix,suffix,blast_seq_file,gene_list_outfile,gene_pair_outfile,seq_file_suffix="'\\|.+'",blast_args)
+  find_pairs(orthomcl_file,blast_file,gene_prefix,gene_suffix,blast_seq_file,gene_list_outfile,gene_pair_outfile,seq_file_suffix="'\\|.+'",blast_args)
   gene_pair_infile = gene_pair_outfile
 end
 
 cds_seq_objs = read_seq_objs(cds_file,nil,seq_file_suffix)
 
-gene_pairs = read_gene_pairs(gene_pair_infile)
+gene_pairs = read_gene_pairs(gene_pair_infile, pair_sep)
 
 single_with_multi_gene_pairs = find_single_with_multi_gene_pairs(gene_pairs,gff_info)
 

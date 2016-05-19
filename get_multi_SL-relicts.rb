@@ -17,6 +17,8 @@ blast8_file=nil
 evalue_cutoff = 1
 include_list = nil
 suffix = nil
+queries = Array.new
+evalue_higher_level_cutoff = 0.001
 
 posi_subject=Hash.new
 genes_included = Hash.new
@@ -28,6 +30,8 @@ opts = GetoptLong.new(
   ["-e", "--evalue", "--e_value", GetoptLong::REQUIRED_ARGUMENT],
   ["--include_list", GetoptLong::REQUIRED_ARGUMENT],
   ["--suffix", GetoptLong::REQUIRED_ARGUMENT],
+  ["--query", GetoptLong::REQUIRED_ARGUMENT],
+  ["--evalue_higher_level", "--e0", GetoptLong::REQUIRED_ARGUMENT],
 )
 
 opts.each do |opt,value|
@@ -40,6 +44,10 @@ opts.each do |opt,value|
       include_list = value
     when "--suffix"
       suffix = value
+    when "--query"
+      value.split(",").map{|i|queries << i}
+    when "--evalue_higher_level", "--e0"
+      evalue_higher_level_cutoff = value.to_f
   end
 end
 
@@ -59,7 +67,8 @@ end
 File.open(blast8_file,'r').each_line do |line|
   next if line =~ /^#/
   line.chomp!
-  subject,subject_start,subject_stop,evalue,bit_score = line.split("\t").values_at(1,8,9,10,11).map{|i|i.numeric? ? i.to_f : i}
+  query, subject,subject_start,subject_stop,evalue,bit_score = line.split("\t").values_at(0,1,8,9,10,11).map{|i|i.numeric? ? i.to_f : i}
+  next if not queries.include?(query) if not queries.empty?
   if ! suffix.nil?
     subject.sub!(/#{suffix}$/, '')
   end
@@ -72,7 +81,8 @@ File.open(blast8_file,'r').each_line do |line|
   evalue = evalue.to_f
   next if evalue > evalue_cutoff
   posi_subject[subject]=multi_D_Hash(2) if not posi_subject.include? subject
-  posi_subject[subject][subject_range]['bit_score']=bit_score
+  posi_subject[subject][subject_range]['bit_score'] = bit_score
+  posi_subject[subject][subject_range]['evalue'] = evalue.to_f
 end
 
 
@@ -80,6 +90,8 @@ posi_subject.each_pair do |subject,ranges|
   next if ranges.size == 1
   posi_infos = ranges.keys.sort_by{|r|r.to_a[0]}.map{|k|k}
   bit_score_infos  = ranges.keys.sort_by{|r|r.to_a[0]}.map{|k|ranges[k]['bit_score']}
+  evalues = ranges.keys.sort_by{|r|r.to_a[0]}.map{|k|ranges[k]['evalue']}
+  next if not evalues.any?{|i|i.to_f <= evalue_higher_level_cutoff}
   puts [subject,bit_score_infos].join("\t")+['',posi_infos].join("\t")
   #{|a|a[0]}.map{|i|posi_subject[subject][i]['bit_score'].to_s}].join("\t")
 end

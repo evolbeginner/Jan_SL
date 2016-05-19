@@ -3,6 +3,7 @@
 # to trim sequences based on the number of nucleotides of the CDS sequences
 # Written by Sishuo Wang from the department of Botany, the University of British Columbia (sishuowang@hotmail.ca)
 
+
 ###########################################################################
 require 'bio'
 require 'getoptlong'
@@ -11,6 +12,7 @@ cds_file=nil
 is_translate=false
 codon_table=1
 
+
 ###########################################################################
 def trim_cds_seq(seq=nil, is_translate=false, codon_table=1)
   #numberOfBpToTrim = seq.length % 3
@@ -18,7 +20,7 @@ def trim_cds_seq(seq=nil, is_translate=false, codon_table=1)
   if is_translate then
     naSeq_obj = Bio::Sequence::NA.new(seq)
     1.upto(3) do |i|
-      aaSeq=naSeq_obj.translate(i)
+      aaSeq = naSeq_obj.translate(i)
       numberOfBpToTrim=i-1 and break if aaSeq !~ /\*(?=.)/
     end
   end
@@ -90,6 +92,7 @@ opts.each do |opt,value|
   end
 end
 
+
 ###########################################################################
 fh = Bio::FlatFile.open(cds_file)
 fh.each_entry do |f|
@@ -98,4 +101,5 @@ fh.each_entry do |f|
   puts ['>', f.definition].join('')
   puts new_seq
 end
+
 

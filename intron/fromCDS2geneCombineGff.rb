@@ -39,10 +39,12 @@ end
 
 
 #################################################################
-File.open(longest_rela_file).each_line do |line|
-  line.chomp!
-  line_arr = line.split("\t")
-  rela[line_arr[1]] = line_arr[0]
+if not longest_rela_file.nil?
+  File.open(longest_rela_file).each_line do |line|
+    line.chomp!
+    line_arr = line.split("\t")
+    rela[line_arr[1]] = line_arr[0]
+  end
 end
 
 
@@ -55,18 +57,20 @@ File.open(gff_file).each_line do |line|
   strand = line_arr[6]
   next if not features.include?(line_arr[2])
   if line_arr[-1] =~ /#{attr}=([^;]+)/
-    if rela.include?($1)
-      chr_info[$1] = chr
-      coordinates[$1] << start << stop
-      strand_info[$1] = strand
+    if not rela.empty?
+      next if not rela.include?($1)
     end
+    chr_info[$1] = chr
+    coordinates[$1] << start << stop
+    strand_info[$1] = strand
   end
 end
 
 
 coordinates.each_pair do |gene, v|
   start, stop = v.minmax
-  puts [chr_info[gene], '.', 'gene', start.to_s, stop.to_s, '.', strand_info[gene], '.', "ID="+rela[gene]].join("\t")
+  out_gene = rela.empty? ? gene : rela[gene]
+  puts [chr_info[gene], '.', 'gene', start.to_s, stop.to_s, '.', strand_info[gene], '.', "ID="+out_gene].join("\t")
 end
 
 
