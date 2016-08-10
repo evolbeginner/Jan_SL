@@ -17,6 +17,8 @@ require 'bio'
 require 'getoptlong'
 require 'filter_blast_output'
 
+
+###############################################
 input=nil
 outdir=nil
 sl_seq=nil
@@ -26,7 +28,10 @@ is_remove_null=false
 is_quiet=false
 blast_outfmt=0
 e_value_cutoff=10000
+strand = "plus"
+is_bl2seq = false
 add_args=nil
+
 
 ############################################################################
 class BL2SEQ
@@ -34,12 +39,13 @@ class BL2SEQ
   attr_accessor :seq, :sl_seq, :title, :outdir, :add_args
   attr_reader :counter
 
-  def initialize()
-    @seq=nil
-    @title=nil
-    @outdir=nil
-    @bl2seq_output=nil
-    @add_args=nil
+  def initialize(is_bl2seq=false)
+    @seq = nil
+    @title = nil
+    @outdir = nil
+    @bl2seq_output = nil
+    @add_args = nil
+    @is_bl2seq = is_bl2seq
   end
 
   def generate_in_fasta
@@ -53,7 +59,8 @@ class BL2SEQ
     return ([in_fasta,bl2seq_output])
   end
 
-  def find_repeats(is_remove_null, blast_outfmt=0, e_value_cutoff)
+  def find_repeats(is_remove_null, e_value_cutoff, blast_outfmt=0, strand="plus")
+    return if @title == "" or @title.nil?
     @@counter = @@counter.nil? ? (1) : (@@counter+1)
     puts @@counter if @@counter%1000==0
     in_fasta, bl2seq_output = generate_in_fasta
@@ -65,8 +72,13 @@ class BL2SEQ
       out_SL = File.open(in_tmp_sl, 'w')
       out_SL.puts ">#{f.definition}\n#{f.seq}"
       out_SL.close
-      cmd="bl2seq -i #{in_tmp_sl} -j #{in_fasta} -o #{bl2seq_output}"
-      cmd += " -p blastn -D #{blast_outfmt} -e #{e_value_cutoff} -W 7 -S 1 -F F"
+      cmd = nil
+      if @is_bl2seq
+        cmd="bl2seq -i #{in_tmp_sl} -j #{in_fasta} -o #{bl2seq_output}"
+        cmd += " -p blastn -D #{blast_outfmt} -e #{e_value_cutoff} -W 7 -S #{strand} -F F"
+      else
+        cmd="blastn -query #{in_tmp_sl} -subject #{in_fasta} -out #{bl2seq_output} -evalue #{e_value_cutoff} -word_size 7 -outfmt 6 -strand #{strand}"
+      end
       cmd += ' ' + add_args if add_args
       `#{cmd}`
       bl2seq_outputs_lines.push File.open(bl2seq_output, 'r').readlines
@@ -101,6 +113,8 @@ opts = GetoptLong.new(
   ['--remove_null', GetoptLong::NO_ARGUMENT],
   ['--blast_outfmt', GetoptLong::REQUIRED_ARGUMENT],
   ['--e_value', GetoptLong::REQUIRED_ARGUMENT],
+  ['--strand', GetoptLong::REQUIRED_ARGUMENT],
+  ['--bl2seq', GetoptLong::NO_ARGUMENT],
   ['--args','--add_args', GetoptLong::REQUIRED_ARGUMENT],
 )
 
@@ -122,12 +136,18 @@ opts.each do |opt, value|
       blast_outfmt=value
     when '--e_value'
       e_value_cutoff=value.to_f
+    when '--bl2seq'
+      is_bl2seq = true
+    when '--strand'
+      strand = value
     when '--args', 'add_args'
       add_args=value
   end
 end
 
+
 raise "Params are not complete! Please check." if not input or not outdir
+
 
 `rm -rf #{outdir}` if File.exists?(outdir)
 `mkdir -p #{outdir}`
@@ -139,18 +159,31 @@ if ! region.nil? then
   end
 end
 
+
+if is_bl2seq
+  case strand
+    when "plus"
+      strand = "1"
+    when "minus"
+      strand = "2"
+    when "both"
+      strand = "3"
+  end
+end
+
+
 ############################################################################
 fh = Bio::FlatFile.open(input)
 fh.each_entry do |f|
   seq_obj = Bio::Sequence::NA.new(f.seq)
   seq = region.nil? ? f.seq : seq_obj.subseq(start,stop)
-  bl2seq_obj=BL2SEQ.new()
+  bl2seq_obj=BL2SEQ.new(is_bl2seq)
   bl2seq_obj.title=f.definition
   bl2seq_obj.seq=seq
   bl2seq_obj.sl_seq=sl_seq
   bl2seq_obj.outdir=outdir
   bl2seq_obj.add_args=add_args if add_args
-  bl2seq_obj.find_repeats(is_remove_null, blast_outfmt, e_value_cutoff)
+  bl2seq_obj.find_repeats(is_remove_null, e_value_cutoff, blast_outfmt, strand)
   if not is_quiet then
     puts [f.definition,bl2seq_obj.counter].join("\t")
   end

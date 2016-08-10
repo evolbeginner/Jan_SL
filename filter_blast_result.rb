@@ -3,14 +3,6 @@
 BEGIN{
   file_name=__FILE__
   $: << [File.dirname(file_name),'lib'].join('/')
-=begin
-  IO.popen("ls -lh #{__FILE__}", "r").readlines.each do |line|
-    line.chomp!
-    if line =~ /\-\> (.+)/ then
-      file_name=$1
-    end
-  end
-=end
 }
 
 
@@ -30,6 +22,7 @@ def generate_regions_range(keys, posi) # keys: %w[query subject]
   return regions_range
 end
 
+
 ###################################################################################
 indir=nil
 outdir=nil
@@ -43,6 +36,8 @@ regions_range = Hash.new{|h,k|h[k]=Hash.new}
 donor_args=Hash.new
 seq_files=Array.new
 seq_objs=Hash.new
+queries = Array.new
+
 
 ###################################################################################
 opts=GetoptLong.new(
@@ -58,6 +53,7 @@ opts=GetoptLong.new(
   ['--regions_range_subject',GetoptLong::REQUIRED_ARGUMENT],
   ['--donor_args',GetoptLong::REQUIRED_ARGUMENT],
   ['--seq_files',GetoptLong::REQUIRED_ARGUMENT],
+  ['--query', GetoptLong::REQUIRED_ARGUMENT],
   ['--force',GetoptLong::NO_ARGUMENT],
 )
 
@@ -97,6 +93,8 @@ opts.each do |opt,value|
       value.split(',').each do |file|
         seq_files.push file
       end
+    when '--query'
+      value.split(',').map{|i|queries << i}
     when '--force'
       force=true
   end
@@ -124,7 +122,7 @@ Dir.foreach(indir) do |file|
   next if file =~ /^tmp/
   file_FullName=[indir, file].join("/")
   filterBlastOutput_object = FilterBlastOutput.new(file_FullName, blast_outfmt, seq_objs)
-  filterBlastOutput_object.filter(e_value_cutoffs, identity_range, aligned_length_range, regions_range, action, outdir, donor_args)
+  filterBlastOutput_object.filter(e_value_cutoffs, identity_range, aligned_length_range, regions_range, action, outdir, queries, donor_args)
 end
 
 

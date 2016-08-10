@@ -104,7 +104,7 @@ end
 
 
 def get_pair(genes)
-  return genes.sort.join('_')
+  return genes.sort.join('-')
 end
 
 
@@ -233,14 +233,15 @@ def select_pairs_from_multi_blast_hits(blast_pairs, genes_not_in_pairs, gene_lis
         end
         if best.empty?
           is_go_on=true
-        elsif v[:e_value] < best[:e_value]
+        elsif v[:bit_score] > best[:bit_score]
           is_go_on=true
-        elsif v[:e_value] == best[:e_value]
-          next if v[:coverage] < best[:coverage]
-          is_go_on=true
+        elsif v[:bit_score] == best[:bit_score]
+          if v[:coverage] > best[:coverage]
+            is_go_on=true
+          end
         end
         if is_go_on then
-          pair=[gene,paralog].join('_')
+          pair=[gene,paralog].join('-')
           counter = gene_list.include?(paralog) ? 2 : 1
           best=v
         end

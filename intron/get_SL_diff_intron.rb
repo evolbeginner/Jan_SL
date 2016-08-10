@@ -13,6 +13,7 @@ cds_num_file = nil
 kaks_file = nil
 blast8_file = nil
 evalue_cutoff = 0.001
+is_show_gene = false
 
 final_gene_sets = multi_D_Hash(3)
 gene_info = Hash.new
@@ -186,6 +187,7 @@ opts = GetoptLong.new(
   ['--KaKs', '--KaKs_file', '--kaks', '--kaks_file', GetoptLong::REQUIRED_ARGUMENT],
   ['-b', '--blast8', GetoptLong::REQUIRED_ARGUMENT],
   ['-e', '--evalue', GetoptLong::REQUIRED_ARGUMENT],
+  ['--show', '--show_gene', GetoptLong::NO_ARGUMENT],
 )
 
 opts.each do |opt, value|
@@ -202,13 +204,12 @@ opts.each do |opt, value|
       kaks_file = value
     when '-b', '--blast8'
       blast8_file = value
-    when '-e'
+    when '-e', '--evalue'
       evalue_cutoff = value.to_f
+    when '--show', '--show_gene'
+      is_show_gene = true    
   end
 end
-
-
-
 
 
 ###################################################################
@@ -248,13 +249,23 @@ intron_diff_file_obj.intron_posi_info.each_pair do |type, v|
       end
       next if pair_info_file_obj.sl_gene_info[gene]['num_of_SL'] == 2
       final_gene_sets[type]["all"][intron_full_name] = ""
-      #next if gene_info[gene].ks > 2
-      final_gene_sets[type]["ks"][intron_full_name] = ""
-      next if gene_info[gene].cds_num > 5
-      final_gene_sets[type]["ks_cds"][intron_full_name] = ""
-      next if (not intron_info.include?(gene) or not intron_info[gene].include?(intron_full_name))
-      final_gene_sets[type]["on_list"][intron_full_name] = ""
+
+      if gene_info[gene].methods.include?('ks') and gene_info[gene].ks <= 2
+        final_gene_sets[type]["ks"][intron_full_name] = ""
+      end
+      if gene_info[gene].cds_num <= 5
+        final_gene_sets[type]["cds"][intron_full_name] = ""
+      end
+      if not (not intron_info.include?(gene) or not intron_info[gene].include?(intron_full_name))
+        final_gene_sets[type]["on_list"][intron_full_name] = ""
+      end
     end
+  end
+  
+  #intersect_list = final_gene_sets[type]["ks"].keys & final_gene_sets[type]["cds"].keys & final_gene_sets[type]["on_list"].keys
+  intersect_list = ['ks', 'cds', 'on_list'].inject(Array.new){|i,j| i.empty? ? final_gene_sets[type][j].keys : i & final_gene_sets[type][j].keys}
+  intersect_list.each do |i|
+    final_gene_sets[type]["intersect"][i] = ""
   end
 end
 
@@ -262,8 +273,15 @@ end
 final_gene_sets.each_pair do |type, v|
   puts type
   puts ["all", v["all"].size].map{|i|i.to_s}.join("\t")
-  puts ["ks_cds", v["ks_cds"].size].map{|i|i.to_s}.join("\t")
+  if is_show_gene
+    v['all'].each_key do |intron|
+      puts intron
+    end
+  end
+  puts ["ks", v["ks"].size].map{|i|i.to_s}.join("\t")
+  puts ["cds", v["cds"].size].map{|i|i.to_s}.join("\t")
   puts ["on_list", v["on_list"].size].map{|i|i.to_s}.join("\t")
+  puts ["intersect", v["intersect"].size].map{|i|i.to_s}.join("\t")
 end
 
 

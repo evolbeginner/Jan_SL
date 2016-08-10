@@ -7,6 +7,8 @@ require "bio"
 
 
 ##########################################################################
+dir = nil
+data_dir = nil
 infiles = Array.new
 orgn = nil
 exon_file = nil
@@ -18,6 +20,7 @@ evalue_cutoff = 1e-3
 queries_included = Array.new
 pep_seq_file = nil
 up300_seq_file = nil
+regexps = Array.new
 suffix = nil
 
 gff_info = Hash.new
@@ -95,7 +98,7 @@ def read_pair_file(pair_file)
 end
 
 
-def read_blast8_file(blast8_file, evalue_cutoff, queries_included={})
+def read_blast8_file(blast8_file, evalue_cutoff, queries_included=[])
   blast_info = Hash.new{|h,k|h[k]=Array.new}
   content = File.open(blast8_file, 'r').read
   content.gsub!(/[#][^\n]+\n/, '')
@@ -125,6 +128,8 @@ end
 
 ##########################################################################
 opts = GetoptLong.new(
+  ["--dir", GetoptLong::REQUIRED_ARGUMENT],
+  ["--data_dir", GetoptLong::REQUIRED_ARGUMENT],
   ["-i", '--in', GetoptLong::REQUIRED_ARGUMENT],
   ["--orgn", '--ORGN', GetoptLong::REQUIRED_ARGUMENT],
   ["--exon", '--exon_file', '--num_exon', GetoptLong::REQUIRED_ARGUMENT],
@@ -136,11 +141,16 @@ opts = GetoptLong.new(
   ["--query", "--query_included", GetoptLong::REQUIRED_ARGUMENT],
   ["--pep", "--pep_seq", GetoptLong::REQUIRED_ARGUMENT],
   ["--up300", "--up300_seq", GetoptLong::REQUIRED_ARGUMENT],
+  ["--regexp", GetoptLong::REQUIRED_ARGUMENT],
   ["--suffix", GetoptLong::REQUIRED_ARGUMENT],
 )
 
 opts.each do |opt, value|
   case opt
+    when '--dir'
+      dir = value
+    when '--data_dir'
+      data_dir = value
     when '-i', '--in'
       infiles << value
     when '--orgn', '--ORGN'
@@ -163,12 +173,43 @@ opts.each do |opt, value|
       pep_seq_file = value
     when '--up300', '--up300_seq'
       up300_seq_file = value
+    when '--regexp'
+      regexps << value
     when '--suffix'
       suffix = value
   end
 end
 
-blast_info = read_blast8_file(blast8_file, evalue_cutoff, queries_included)
+
+if not dir.nil?
+  exon_file = Dir.glob(File.join([dir, "exon_counts/*.exon_counts"]))[0]
+  blast8_file = File.join([dir, "BLAST_SL/selected-2/CDS_upstream300_bl2seq_D1_E0-0.001.blast8"])
+  pair_file = File.join([dir, "SL-parent_pairs/blastn/1e-5/final_pairs"])
+  infiles << File.join([dir, "gene_lists/blastn/1e-5/genes_with_SLs.all.e0-0.00001.AlnLength10-50.list"])
+  pep_seq_file = Dir.glob(File.join([data_dir, "sequences/*pep.fas"]))[0]
+  up300_seq_file = Dir.glob(File.join([data_dir, "result_sequences/*upstream300.fas"]))[0]
+end
+
+
+if not File.exists?(exon_file)
+  puts "exon_file #{exon_file} does not exist. Exiting ......"
+  exit  
+elsif not File.exists?(blast8_file)
+  puts "blast8_file #{blast8_file} does not exist. Exiting ......"
+  exit
+elsif not File.exists?(pair_file)
+  puts "pair_file #{pair_file} does not exist. Exiting ......"
+  exit
+elsif not File.exists?(pep_seq_file)
+  puts "pep_seq_file #{pep_seq_file} does not exist. Exiting ......"
+  exit
+elsif not File.exists?(up300_seq_file)
+  puts "up300_seq_file #{up300_seq_file} does not exist. Exiting ......"
+  exit
+elsif infiles.any?{|infile| not File.exists?(infile)}
+  puts "At least one of the infiles does not exist. Exiting ......"
+  exit
+end
 
 
 ##########################################################################
@@ -178,7 +219,7 @@ up300_seq_info = read_seq_file(up300_seq_file)
 
 genes = read_gene_lists(infiles)
 
-gff_info = read_gff(gff_file, attr, suffix)
+gff_info = read_gff(gff_file, attr, suffix) if not gff_file.nil?
 
 blast_info = read_blast8_file(blast8_file, evalue_cutoff, queries_included)
 
@@ -198,9 +239,6 @@ begin
               orgn VARCHAR(30),
               parent VARCHAR(50),
               exon_num INT,
-              chr VARCHAR(40),
-              start INT,
-              end INT,
               pep_seq VARCHAR(5000),
               up300_seq VARCHAR(350),
               identities VARCHAR(50),
@@ -213,7 +251,7 @@ begin
   
   genes.each_key do |gene|
     if not exon_num.include?(gene)
-      STDERR.puts "Warming: gene #{gene} not included in exon_num file."
+      STDERR.puts "Warning: gene #{gene} not included in exon_num file #{exon_file}."
       next
     end
 
@@ -225,13 +263,20 @@ begin
 
     pri = [orgn, gene].join('-')
     identity_str = blast_info[gene].map{|i|i.percent_identity}.map{|i|i.to_s+"%"}.join(",")
-    target_start_str = blast_info[gene].map{|i|i.hit_from}.map{|i|i.to_s}.join(",")
-    target_end_str = blast_info[gene].map{|i|i.hit_to}.map{|i|i.to_s}.join(",")
+    target_start_str = blast_info[gene].map{|i|300-i.hit_to+1}.map{|i|i.to_s}.join(",")
+    target_end_str = blast_info[gene].map{|i|300-i.hit_from+1}.map{|i|i.to_s}.join(",")
     aln_length_str = blast_info[gene].map{|i|i.align_len}.map{|i|i.to_s}.join(",")
     evalue_str = blast_info[gene].map{|i|i.evalue}.map{|i|i.to_s}.join(",")
 
-    con.query("INSERT INTO Genes(pri, id, orgn, parent, exon_num, chr, start, end, pep_seq, up300_seq, identities, target_starts, target_ends, aln_lengths, evalues) \
-              VALUES(\"#{pri}\", \"#{gene}\", \"#{orgn}\", \"#{parent}\", #{exon_num[gene]}, \"#{gff_info[gene]['chr']}\", #{gff_info[gene]['start']}, #{gff_info[gene]['end']}, \"#{pep_seq_info[gene]}\", \"#{up300_seq_info[gene]}\", \"#{identity_str}\", \"#{target_start_str}\", \"#{target_end_str}\", \"#{aln_length_str}\", \"#{evalue_str}\")"
+    new_gene = Marshal.load(Marshal.dump(gene))
+    new_parent = Marshal.load(Marshal.dump(parent))
+    regexps.each do |regexp|
+      new_gene = new_gene.sub!(/#{regexp}/, "")
+      new_parent = new_parent.sub!(/#{regexp}/, "") unless new_parent.nil?
+    end
+
+    con.query("REPLACE INTO Genes(pri, id, orgn, parent, exon_num, pep_seq, up300_seq, identities, target_starts, target_ends, aln_lengths, evalues) \
+              VALUES(\"#{pri}\", \"#{new_gene}\", \"#{orgn}\", \"#{new_parent}\", #{exon_num[gene]}, \"#{pep_seq_info[gene]}\", \"#{up300_seq_info[gene]}\", \"#{identity_str}\", \"#{target_start_str}\", \"#{target_end_str}\", \"#{aln_length_str}\", \"#{evalue_str}\")"
              )
   end
 
@@ -240,7 +285,6 @@ begin
   
   counter = 0
   rs.each do |row|
-    #puts row.join("\t")
     counter += 1
   end
   puts "Successfull! #{counter} items have been inserted into the table Genes"

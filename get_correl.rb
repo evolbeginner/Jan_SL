@@ -7,6 +7,7 @@ require 'getoptlong'
 require 'basic_math'
 
 
+#############################################################################
 inputs = Array.new
 list_file = nil
 gene_sep = "\t"
@@ -42,10 +43,11 @@ def read_numbers_file(file, value_info, counter, fields=[0,1], sep="\t", allele_
   fh.each_line do |line|
     next if $. == 1
     line.chomp!
-    gene_name, value  = line.split(sep).values_at(fields[0], fields[1])
+    line_arr = line.split(sep)
+    gene_name, value  = line_arr.values_at(fields[0], fields[1])
     gene_name = del_allele(gene_name, allele_RegExp) if ! allele_RegExp.nil?
     value = value.to_f
-    if not is_log
+    if is_log
       value_info[gene_name][counter] = Math::log(value+fpkm_added)
     else
       value_info[gene_name][counter] = value
@@ -117,6 +119,7 @@ gene_pairs.each do |pair_genes|
   #next if values[0] == values[1]
   next if values[0].size != values[1].size
   puts pair_genes.join("-") + "\t" + spearman_correlate(values[0], values[1]).to_s
+  #p values
   #puts pair_genes.join("-") + "\t" + pearson_correlate(values[0], values[1]).to_s
 end
 

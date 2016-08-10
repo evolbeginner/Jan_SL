@@ -8,6 +8,7 @@ require "basic_math"
 infiles = Array.new
 outfile = nil
 cufflinks_gene_field = 4
+fpkm_field = 10
 include_list_file = nil
 pair_file = nil
 suffix = nil
@@ -22,6 +23,7 @@ opts = GetoptLong.new(
   ["-i", "--in", GetoptLong::REQUIRED_ARGUMENT],
   ["-o", "--out", GetoptLong::REQUIRED_ARGUMENT],
   ["--cufflinks_gene_field", GetoptLong::REQUIRED_ARGUMENT],
+  ["--fpkm_field", GetoptLong::REQUIRED_ARGUMENT],
   ["--include_list", GetoptLong::REQUIRED_ARGUMENT],
   ["--pair", "--pair_file", GetoptLong::REQUIRED_ARGUMENT],
   ["--suffix", "--gene_suffix", GetoptLong::REQUIRED_ARGUMENT],
@@ -35,6 +37,8 @@ opts.each do |opt, value|
       outfile = value
     when "--cufflinks_gene_field"
       cufflinks_gene_field = value.to_i
+    when "--fpkm_field"
+      fpkm_field = value.to_i
     when "--include_list"
       include_list_file = value
     when "--pair", "--pair_file"
@@ -64,7 +68,8 @@ end
 infiles.each do |infile|
   File.open(infile, "r").each_line do |line|
     line.chomp!
-    gene, fpkm = line.split("\t").values_at(cufflinks_gene_field, -1)
+    line_arr = line.split("\t")
+    gene, fpkm = line_arr.values_at(cufflinks_gene_field-1, fpkm_field-1)
     if ! genes_included.empty?
       next if ! genes_included.include?(gene)
     end

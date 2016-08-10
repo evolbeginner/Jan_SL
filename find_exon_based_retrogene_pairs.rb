@@ -9,19 +9,30 @@ require 'getoptlong'
 require 'bio'
 require 'read_seq_objs'
 require 'Dir'
+require 'Hash'
 
 
 ####################################################################
-def read_gene_pairs(gene_pair_file, pair_sep='-')
+def read_gene_pairs(gene_pair_file, pair_sep="\t", singletons)
   gene_pairs=Array.new
   File.open(gene_pair_file,'r').each_line do |line|
     line.chomp!
     line_array = line.split("\t")
-    target_gene = line_array[0]
-    paralog = line_array[2].split(pair_sep).select{ |i|i != target_gene }[0]
-    gene_pairs.push([target_gene,paralog])
+    #target_gene = line_array[0]
+    genes = line.split(pair_sep)
+    counter = 0
+    genes.each do |gene|
+      if singletons.include?(gene)
+        counter += 1
+      end
+    end
+    if counter == 1
+      target_gene = genes.select{|i|singletons.include?(i)}[0]
+      paralog = genes.select{|i|! singletons.include?(i)}[0]
+      gene_pairs.push([target_gene,paralog])
+    end
   end
-  return gene_pairs
+  return(gene_pairs)
 end
 
 
@@ -30,12 +41,29 @@ def find_single_with_multi_gene_pairs(gene_pairs, gff_info)
 end
 
 
-def find_spanning_exons(single_with_multi_gene_pairs, gff_info, cds_seq_objs, outdir)
+def find_spanning_exons(single_with_multi_gene_pairs, gff_info, cds_seq_objs, outdir, blast_info)
   tmp_aln_dir = File.join(outdir,'tmp_aln')
   aln_dir = File.join(outdir,'aln')
   Dir.mkdir(tmp_aln_dir)
   Dir.mkdir(aln_dir)
   single_with_multi_gene_pairs.each do |target,paralog|
+    next if not blast_info.include?(target) or not blast_info[target].include?(paralog)
+    q_range = blast_info[target][paralog]['q_range']
+    s_range = blast_info[target][paralog]['s_range']
+    counter = 0
+    intron_positions = Array.new
+    gff_info[paralog]['starts'].each do |exon_start|
+      next if exon_start == 1
+      intron_posi = (exon_start-1)/3+1
+      if s_range.include?(intron_posi)
+        counter += 1
+        intron_positions << intron_posi
+      end
+    end
+    if counter >= 3
+      puts [target, paralog, counter, ].map{|i|i.to_s}.join("\t")
+    end
+=begin
     tmp_seq_fas = File.join(tmp_aln_dir,'tmp.fas')
     seq_aln = File.join(aln_dir,[target,paralog].join("-")) + '.aln'
     fh = File.open(tmp_seq_fas,'w')
@@ -44,6 +72,7 @@ def find_spanning_exons(single_with_multi_gene_pairs, gff_info, cds_seq_objs, ou
     fh.close
     `muscle -in #{tmp_seq_fas} -out #{seq_aln} -quiet 2>/dev/null`
     parse_aln_file(seq_aln,gff_info)
+=end
   end
 end
 
@@ -78,13 +107,13 @@ def parse_aln_file(aln_file, gff_info)
 end
 
 
-def get_gene_list_by_num_of_exons(exon_info_file,max_num_of_exons=1,exon_info_file_format='list',fields=[1,4],separator="\t")
+def get_gene_list_by_num_of_exons(exon_info_file,max_num_of_exons=1,exon_info_file_format='list',fields=[1,3],separator="\t")
   gene_list = Hash.new
   num_of_exons_hash=Hash.new
   fh=File.open(exon_info_file, 'r')
   fh.each_line do |line|
     line.chomp!
-    gene,num_of_exons = line.split(separator).values_at(fields[0]-1,fields[1]-1)
+    gene, num_of_exons = line.split(separator).values_at(fields[0]-1,fields[1]-1)
     num_of_exons=num_of_exons.to_i
     if num_of_exons <= max_num_of_exons
       gene_list[gene] = ''
@@ -99,7 +128,7 @@ def find_pairs(orthomcl_output,blast_output,prefix,suffix,seq_file,gene_list,out
                 seq_file_suffix='\|.+',blast_args={'e_value'=>1e-10,'coverage'=>0.3})
   dirname = File.dirname($0)
   get_duplicate_pairs_based_on_PlantCell = File.join([dirname, "get_duplicate_pairs_based_on_PlantCell.rb"])
-  blast_args_content = %w[e_value coverage].map{|i|blast_args[i]}.join(",")
+  blast_args_content = %w[e_value coverage].map{|i|i + ':' + blast_args[i].to_s}.join(",")
   execute = "time ruby2.1 #{get_duplicate_pairs_based_on_PlantCell} --orthomcl #{orthomcl_output} --blast #{blast_output} --seq #{seq_file} --prefix #{prefix} --seq_file_suffix #{seq_file_suffix} --blast_args #{blast_args_content} --gene_list #{gene_list} --o2 #{outfile}"
   puts "\nCommand:"
   puts execute
@@ -137,6 +166,30 @@ def get_gff_info(gff=nil, features=[], attributes=[])
 end
 
 
+def read_blast_info(blast_seq_file, prefix)
+  blast_info = multi_D_Hash(3)
+  File.open(blast_seq_file).each_line do |line|
+    next if line =~ /^#/
+    line.chomp!
+    #symbB.v1.2.000006	symbB.v1.2.012411	26.84	272	173	8	133	399	85	335	3e-25	  107
+    line_arr = line.split("\t")
+    query, subject = line_arr[0,2]
+    query.sub!(/#{prefix}/, '')
+    subject.sub!(/#{prefix}/, '')
+    next if query == subject
+    q_start, q_end, s_start, s_end = line_arr[6,4].map{|i|i.to_i}
+    evalue = line_arr[-2].to_f
+    blast_info[query][subject]['evalue'] = evalue if not blast_info.include?(query) or not blast_info[query].include?(subject)
+    next if evalue > blast_info[query][subject]['evalue']
+    v = blast_info[query][subject]
+    v['q_range'] = q_start..q_end
+    v['s_range'] = s_start..s_end
+    v['evalue'] = evalue
+  end
+  return(blast_info)
+end
+
+
 def show_help()
   basename=File.basename($0)
   puts "Usage of #{basename}: ruby #{basename}"
@@ -169,7 +222,7 @@ outdir="./"
 force=false
 gene_pair_outfile=nil
 gene_pair_infile=nil
-pair_sep='-'
+pair_sep="\t"
 
 gene_list=Hash.new
 max_num_of_exons=1
@@ -229,15 +282,15 @@ opts.each do |opt,value|
       blast_seq_file=value
     when '--prefix'
       gene_prefix = value
-      gene_prefix = "'" + value + "'"
+      #gene_prefix = "'" + value + "'"
     when '--suffix'
       gene_suffix=value 
     when '--seq_file_suffix'
       seq_file_suffix=value
     when '--blast_args'
-      value.split(/,/).each do |arg| # arg e.g. e_value:0.001
+      value.split(',').each do |arg| # arg e.g. e_value:0.001
         k,v = arg.split(':')
-        blast_args[k.to_sym] = v.to_f
+        blast_args[k] = v.to_f
       end
     when '--outdir'
       outdir=value
@@ -265,21 +318,24 @@ gene_pair_outfile=File.join([outdir,'gene_pairs.list'])
 
 
 ####################################################################
-if not (exon_info_file) or (not cds_file)
-  raise "exon_info_file or cds_file not given!"
+if not (exon_info_file) or (not blast_seq_file)
+  raise "exon_info_file or blast_seq_file not given!"
 end
 
-gene_list = get_gene_list_by_num_of_exons(exon_info_file,max_num_of_exons,'',[1,4],"\t")
+gene_list = get_gene_list_by_num_of_exons(exon_info_file,max_num_of_exons,'',[1,3],"\t")
 
 gff_info.merge! get_gff_info(gff_file, features, attributes)
 
+
 gff_info.each_pair do |gene,value|
-  # p value['starts'] if gene == 'symbB.v1.2.000296.t1'
-  value['starts'].reverse! if value['strand'] == '-'
+  if value['strand'] == '-'
+    value['starts'].reverse!
+    value['lengths'].reverse!
+  end
   first = value['starts'][0]
   new_starts  = [1]
   new_start   = 1
-  value['lengths'].each_with_index do |length|
+  value['lengths'].each do |length|
     new_start += length
     new_starts.push new_start
   end
@@ -288,23 +344,28 @@ gff_info.each_pair do |gene,value|
   singletons[gene] = '' if value['starts'].size <= max_num_of_exons
 end
 
+
 fh=File.open(gene_list_outfile,'w')
 singletons.each_key do |i|
   fh.puts i
 end
 fh.close
 
+
 if not gene_pair_infile
   find_pairs(orthomcl_file,blast_file,gene_prefix,gene_suffix,blast_seq_file,gene_list_outfile,gene_pair_outfile,seq_file_suffix="'\\|.+'",blast_args)
   gene_pair_infile = gene_pair_outfile
 end
 
-cds_seq_objs = read_seq_objs(cds_file,nil,seq_file_suffix)
 
-gene_pairs = read_gene_pairs(gene_pair_infile, pair_sep)
+blast_info = read_blast_info(blast_file, gene_prefix)
+
+cds_seq_objs = read_seq_objs(blast_seq_file, nil, seq_file_suffix)
+
+gene_pairs = read_gene_pairs(gene_pair_infile, pair_sep, singletons)
 
 single_with_multi_gene_pairs = find_single_with_multi_gene_pairs(gene_pairs,gff_info)
 
-find_spanning_exons(single_with_multi_gene_pairs,gff_info,cds_seq_objs,outdir)
+find_spanning_exons(single_with_multi_gene_pairs,gff_info,cds_seq_objs,outdir,blast_info)
 
 

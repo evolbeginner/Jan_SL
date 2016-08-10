@@ -1,5 +1,6 @@
 #! /bin/env ruby
 
+
 require "getoptlong"
 
 
@@ -8,8 +9,10 @@ infile = nil
 pair_info_file = nil
 yn00_file = nil
 ks_cutoff = nil
+pairs_included_file = nil
 
-pairs = Hash.new
+pairs_excluded = Hash.new
+pairs_included = Hash.new
 counters = Hash.new{|h,k|h[k]=Hash.new{|h,k|h[k]=0}}
 final_counter = Hash.new{|h,k|h[k]=0}
 total_counter = Hash.new{|h,k|h[k]=0}
@@ -32,12 +35,29 @@ def read_yn00_file(yn00_file)
 end
 
 
+def read_pair_info_file(pair_info_file)
+  pairs_included = Hash.new
+  pairs_excluded = Hash.new
+  File.open(pair_info_file).each_line do |line|
+    line.chomp!
+    line_arr = line.split("\t")
+    if line_arr[1] == "1"
+      pairs_included[line_arr[2]] = ""
+    elsif line_arr[1] == "2"
+      pairs_excluded[line_arr[2]] = ""
+    end
+  end
+  return([pairs_included, pairs_excluded])
+end
+
+
 #########################################################
 opts = GetoptLong.new(
   ['-i', '--in', GetoptLong::REQUIRED_ARGUMENT],
   ['-p', '--pair', GetoptLong::REQUIRED_ARGUMENT],
   ['--yn00', GetoptLong::REQUIRED_ARGUMENT],
   ['--ks', GetoptLong::REQUIRED_ARGUMENT],
+  ['--pairs_included', GetoptLong::REQUIRED_ARGUMENT],
 )
 
 opts.each do |opt, value|
@@ -50,6 +70,8 @@ opts.each do |opt, value|
       yn00_file = value
     when '--ks'
       ks_cutoff = value.to_f
+    when '--pairs_included'
+      pairs_included_file = value
   end
 end
 
@@ -57,16 +79,8 @@ end
 #########################################################
 yn00_info = read_yn00_file(yn00_file) if not yn00_file.nil?
 
-
-if not pair_info_file.nil?
-  File.open(pair_info_file).each_line do |line|
-    line.chomp!
-    line_arr = line.split("\t")
-    if line_arr[1] == "2"
-      pairs[line_arr[2]] = ""
-    end
-  end
-end
+pairs_included, pairs_excluded = read_pair_info_file(pair_info_file) if not pair_info_file.nil?
+#pairs_included = read_pair_info_file(pairs_included_file) if not pairs_included_file.nil?
 
 
 #########################################################
@@ -79,11 +93,8 @@ in_fh.each_line do |line|
     pair = line
   end
 
-  if not pairs.empty?
-    if pairs.include?(pair)
-      next
-    end
-  end
+  next if not pairs_included.include?(pair) if not pairs_included.empty?
+  next if pairs_excluded.include?(pair) if not pairs_excluded.empty?
 
   if not yn00_info.empty?
     next if not yn00_info.include?(pair)

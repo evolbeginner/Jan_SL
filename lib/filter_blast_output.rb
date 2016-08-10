@@ -10,7 +10,7 @@ class FilterBlastOutput
     @seq_objs=seq_objs if ! seq_objs.empty?
   end
 
-  def filter(e_value_cutoffs=[0,10000], identity_range=[-1,100], aligned_length_range=[0,10000], regions_range={}, action='rm', outdir=nil, donor_args={})
+  def filter(e_value_cutoffs=[0,10000], identity_range=[-1,100], aligned_length_range=[0,10000], regions_range={}, action='rm', outdir=nil, queries=[], donor_args={})
     @e_value_cutoffs = e_value_cutoffs.map{|i| i.to_f}
     @identity_range = identity_range.map{|i| i.to_f}
     @aligned_length_range = aligned_length_range.map{|i| i.to_i}
@@ -23,12 +23,15 @@ class FilterBlastOutput
         while(line=fh.gets) do
           next if line =~ /^#/;
           line.chomp!
-          subject, identity, aligned_length, start['query'], stop['query'],start['suject'], stop['subject'], e_value = line.split("\t").values_at(1,2,3,6,7,8,9,10).map{|i| i.numeric? ? i.to_f : i}
+          query, subject, identity, aligned_length, start['query'], stop['query'],start['suject'], stop['subject'], e_value = line.split("\t").values_at(0,1,2,3,6,7,8,9,10).map{|i| i.numeric? ? i.to_f : i}
           regions = {
                   'query'   =>  {'start' =>  start['query'],  'stop'  =>  stop['query']} ,
                   'subject' =>  {'start' =>  start['subject'],'stop'  =>  stop['subject']}
                   }
           aligned_length=aligned_length.to_i
+          if not queries.empty?
+            next if not queries.include?(query)
+          end
           next if ! check_pass?(e_value, identity, aligned_length, regions)
           (next if ! check_donor_pass?(donor_args,aligned_length,e_value,start,stop,subject)) if ! donor_args.empty?
           pass=true

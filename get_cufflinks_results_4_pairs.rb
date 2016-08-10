@@ -1,18 +1,25 @@
 #! /bin/env ruby
 
 require 'getoptlong'
+
 require 'Dir'
 
 
+BEGIN{
+  file_name=__FILE__
+  $: << [File.dirname(file_name),'lib'].join('/')
+}
+require 'read_infiles_file'
+
+
 ##############################################################################
-def read_cufflinks_results(cufflinks_file, cufflinks_gene_field=0)
-  fpkms=Hash.new
+def read_cufflinks_results(cufflinks_file, cufflinks_gene_field=0, fpkms={})
   File.open(cufflinks_file,'r').each_line do |line|
     next if $. == 1
     line.chomp!
     tracking_id, fpkm = line.split("\t").values_at(cufflinks_gene_field-1,9)
     fpkm = fpkm.to_f
-    fpkms[tracking_id] = fpkm
+    fpkms[tracking_id] << fpkm
     #fpkms[gene_id]=fpkm
   end
   return(fpkms)
@@ -30,15 +37,15 @@ def get_genes_from_list(gene_list, allele_RegExp)
 end
 
 
-def output_fpkm_4_each_gene(fpkm_samples,output_dir="./")
-  fpkm_samples.each_with_index do |fpkmsh,index|
-    fh=File.open(File.join([output_dir,index.to_s]),'w')
-    fpkmsh.each_pair do |gene, fpkm|
-      fh.puts [gene, fpkm.to_s].join("\t")
-      #fh.puts [gene, fpkm.to_s].join("\t") if fpkm != 0
+def output_fpkm_4_each_gene(fpkmsh, outfile, genes_included=Array.new)
+  fh=File.open(outfile,'w')
+  fpkmsh.each_pair do |gene, fpkm|
+    if ! genes_included.empty?
+      next if not genes_included.include?(gene)
     end
-    fh.close
+    fh.puts [gene, fpkm.to_s].join("\t")
   end
+  fh.close
 end
 
 
@@ -82,16 +89,14 @@ def get_genes_with_SL_info(pairs_file, genes_included, gene_sep="-", gene_pair_f
 end
 
 
-def get_fpkm_results(genes,fpkm_samples)
+def get_fpkm_results(genes,fpkms)
   fpkm_results=Hash.new{|h,k|h[k]=Array.new}
   genes['with_SL'].each_with_index do |gene_with_SL,index1|
     gene_without_SL = genes['without_SL'][index1]
-    fpkm_samples.each_with_index do |fpkm_sample,index2|
-      next if not fpkm_sample.include? gene_with_SL
-      next if not fpkm_sample.include? gene_without_SL
-      pair_name = [gene_with_SL, gene_without_SL].join("-")
-      fpkm_results[index2].push [pair_name, fpkm_sample[gene_with_SL],fpkm_sample[gene_without_SL]]
-    end
+    next if not fpkms.include? gene_with_SL
+    next if not fpkms.include? gene_without_SL
+    pair_name = [gene_with_SL, gene_without_SL].join("-")
+    fpkm_results["0"].push [pair_name, fpkms[gene_with_SL],fpkms[gene_without_SL]]
   end
   return fpkm_results
 end
@@ -123,10 +128,13 @@ fpkm_samples=Array.new
 genes=Hash.new{|h,k|h[k]=Array.new}
 fpkm_results=Hash.new{|h,k|h[k]=Array.new}
 genes_included=Hash.new
+fpkms = Hash.new{|h,k|h[k]=[]}
 
 
+##############################################################################
 opts=GetoptLong.new(
   ['--cufflinks','--cufflinks_results',GetoptLong::REQUIRED_ARGUMENT],
+  ["--read_infiles", "--read_infile", "--read_cufflinks", GetoptLong::REQUIRED_ARGUMENT],
   ['--cufflinks_gene_field',GetoptLong::REQUIRED_ARGUMENT],
   ['--pairs_file','--pairs',GetoptLong::REQUIRED_ARGUMENT],
   ['--genes_included','--genes_list_included',GetoptLong::REQUIRED_ARGUMENT],
@@ -143,6 +151,8 @@ opts.each do |opt,value|
       value.split(',').each do |file|
         cufflinks_files.push file
       end
+    when '--read_infiles', "--read_infile", "--read_cufflinks"
+      cufflinks_files = read_infiles_file(value, cufflinks_files)
     when '--cufflinks_gene_field'
       cufflinks_gene_field = value.to_i
     when '--pairs', '--pairs_file'
@@ -176,18 +186,26 @@ end
 
 ##############################################################################
 cufflinks_files.each do |cufflinks_file|
-  fpkm_samples.push read_cufflinks_results(cufflinks_file, cufflinks_gene_field)
+  fpkms = read_cufflinks_results(cufflinks_file, cufflinks_gene_field, fpkms)
 end
+
 
 if ! genes_lists_included.empty?
   genes_lists_included.map{|list_file|genes_included.merge! get_genes_from_list(list_file, allele_RegExp)}
 end
 
-output_fpkm_4_each_gene(fpkm_samples, fpkm_outdir)
+
+fpkms.each do |gene, v|
+  fpkms[gene] = v.inject{|sum,i|sum+i}/v.size
+end
+
+output_fpkm_4_each_gene(fpkms, fpkm_outdir+'/0')
+
+output_fpkm_4_each_gene(fpkms, fpkm_outdir+'/1', genes_included)
 
 genes = get_genes_with_SL_info(pairs_file, genes_included, gene_sep, gene_pair_file_line_sep, allele_RegExp)
 
-fpkm_results = get_fpkm_results(genes, fpkm_samples)
+fpkm_results = get_fpkm_results(genes, fpkms)
 
 output_pair_fpkm(fpkm_results, pairs_fpkm_outdir)
 
