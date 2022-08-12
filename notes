@@ -1,0 +1,13 @@
+ruby ~/tools/self_bao_cun/basic_process_mini/select_representative_gene_4_gff.rb --gff ../original_data/Smansoni.gff --feature CDS --attr Parent --cds > Smansoni.gff3
+
+# generate shuffled seqs
+for h in 300 500; do echo $h; for j in 1 2 3 4; do echo $j; mkdir -p shuffled/$h/kmer$j; for i in upstream_seq/$h/*; do b=`basename $i`; ~/software/sequence_analysis/meme/5.4.1/src/fasta-shuffle-letters -kmer $j $i shuffled/$h/kmer$j/$b; done; done; done
+
+# blast for kmer
+for h in shuffled/*; do B=`basename $h`; for j in $h/*; do b=`basename $j`; echo "$B $b"; ruby /mnt/bay3/sswang/lian_xi/SL/results/Skawagutii/BLAST_SL/new/run_blast_in_batch_SL.rb --indir $j --outdir blast/$B/$b --force --cpu 16; ruby /mnt/bay3/sswang/lian_xi/SL/results/Skawagutii/BLAST_SL/new/run_blast_in_batch_SL.rb --indir $j --outdir blast/$B-gapped/$b --force --cpu 16 --with_gap; done ; done
+
+# get blast_1st
+for i in blast/*/*; do echo $i; ruby /mnt/bay3/sswang/lian_xi/SL/scripts/BLAST_SL/get_blast_1st.rb --indir $i --outdir ${i/blast/blast_res} --force --cpu 20; done
+
+# 
+bash obtain_info-all.sh

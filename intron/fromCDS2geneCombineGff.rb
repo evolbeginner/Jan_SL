@@ -11,6 +11,7 @@ attr = "Parent";
 coordinates = Hash.new{|h,k|h[k]=[]}
 chr_info = Hash.new
 strand_info = Hash.new
+upstream = nil
 
 rela = Hash.new
 
@@ -21,6 +22,7 @@ opts = GetoptLong.new(
   ["--longest_rela", GetoptLong::REQUIRED_ARGUMENT],
   ["--feature", GetoptLong::REQUIRED_ARGUMENT],
   ["--attr", GetoptLong::REQUIRED_ARGUMENT],
+  ["--upstream", GetoptLong::REQUIRED_ARGUMENT],
 )
 
 
@@ -34,6 +36,8 @@ opts.each do |opt, value|
       features << value
     when '--attr'
       attr = value
+    when '--upstream'
+      upstream = value.to_i
   end
 end
 
@@ -70,7 +74,21 @@ end
 coordinates.each_pair do |gene, v|
   start, stop = v.minmax
   out_gene = rela.empty? ? gene : rela[gene]
-  puts [chr_info[gene], '.', 'gene', start.to_s, stop.to_s, '.', strand_info[gene], '.', "ID="+out_gene].join("\t")
+
+  if not upstream.nil?
+    if strand_info[gene] == '+'
+      new_start = [start - upstream, 1].max
+      new_stop = start - 1
+    else
+      new_stop = stop + upstream
+      new_start = stop + 1
+    end
+    puts [chr_info[gene], '.', 'upstream', new_start.to_s, new_stop.to_s, '.', strand_info[gene], '.', "ID="+out_gene].join("\t")
+
+  else
+    puts [chr_info[gene], '.', 'gene', start.to_s, stop.to_s, '.', strand_info[gene], '.', "ID="+out_gene].join("\t")
+
+  end
 end
 
 
